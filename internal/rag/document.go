@@ -4,14 +4,15 @@ import "time"
 
 // Document is an authoritative knowledge source that can be indexed for retrieval.
 type Document struct {
-	ID        string
-	Source    string
-	URL       string
-	Title     string
-	Type      string
-	Trust     string
-	Content   string
-	UpdatedAt time.Time
+	ID          string
+	Source      string
+	URL         string
+	Title       string
+	Type        string
+	Trust       string
+	Content     string
+	ContentHash string
+	UpdatedAt   time.Time
 }
 
 // Chunk is the retrieval unit derived from a document.
