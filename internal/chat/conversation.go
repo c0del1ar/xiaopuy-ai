@@ -1,6 +1,11 @@
 package chat
 
-import "time"
+import (
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
+	"time"
+)
 
 type Role string
 
@@ -25,10 +30,25 @@ type Conversation struct {
 	Messages   []Message `json:"messages"`
 }
 
+func NewConversation(id, ownerID, contactID string, clientMode bool) Conversation {
+	if id == "" {
+		id = newConversationID()
+	}
+	return Conversation{ID: id, OwnerID: ownerID, ContactID: contactID, ClientMode: clientMode}
+}
+
 func (c *Conversation) Add(role Role, content string) {
 	c.Messages = append(c.Messages, Message{
 		Role:      role,
 		Content:   content,
 		CreatedAt: time.Now().UTC(),
 	})
+}
+
+func newConversationID() string {
+	buf := make([]byte, 12)
+	if _, err := rand.Read(buf); err != nil {
+		return fmt.Sprintf("conv_%d", time.Now().UnixNano())
+	}
+	return "conv_" + hex.EncodeToString(buf)
 }
