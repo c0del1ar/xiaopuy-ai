@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/c0del1ar/xiaopuy-ai/internal/chat"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func TestRepositoryRoundTrip(t *testing.T) {
@@ -18,12 +19,17 @@ func TestRepositoryRoundTrip(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	repo, err := New(ctx, dsn)
+	pool, err := pgxpool.New(ctx, dsn)
 	if err != nil {
-		t.Fatalf("create repository: %v", err)
+		t.Fatalf("create pool: %v", err)
 	}
-	defer repo.Close()
+	defer pool.Close()
 
+	if err := pool.Ping(ctx); err != nil {
+		t.Fatalf("ping database: %v", err)
+	}
+
+	repo := New(pool)
 	conversation := chat.NewConversation("integration-test", "owner", "contact", true)
 	conversation.Add(chat.RoleUser, "Hello")
 	conversation.Add(chat.RoleAssistant, "Hi, how can I help?")
