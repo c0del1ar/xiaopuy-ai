@@ -13,6 +13,16 @@ type RAGRepository struct { pool *pgxpool.Pool }
 
 func NewRAGRepository(pool *pgxpool.Pool) *RAGRepository { return &RAGRepository{pool: pool} }
 
+func (r *RAGRepository) GetDocumentHash(ctx context.Context, documentID string) (string, bool, error) {
+	var hash string
+	err := r.pool.QueryRow(ctx, `SELECT content_hash FROM rag_documents WHERE id = $1`, documentID).Scan(&hash)
+	if err != nil {
+		if err.Error() == "no rows in result set" { return "", false, nil }
+		return "", false, fmt.Errorf("get RAG document hash %q: %w", documentID, err)
+	}
+	return hash, true, nil
+}
+
 func (r *RAGRepository) Upsert(ctx context.Context, document rag.Document, chunks []rag.Chunk, embeddings [][]float32) error {
 	if len(chunks) != len(embeddings) { return fmt.Errorf("chunks and embeddings length mismatch: %d != %d", len(chunks), len(embeddings)) }
 	if len(chunks) == 0 { return nil }
@@ -20,10 +30,8 @@ func (r *RAGRepository) Upsert(ctx context.Context, document rag.Document, chunk
 
 	tx, err := r.pool.Begin(ctx); if err != nil { return fmt.Errorf("begin RAG transaction: %w", err) }
 	defer tx.Rollback(ctx)
-
 	_, err = tx.Exec(ctx, `INSERT INTO rag_documents (id, source, url, title, type, trust, content, content_hash, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (id) DO UPDATE SET source=EXCLUDED.source, url=EXCLUDED.url, title=EXCLUDED.title, type=EXCLUDED.type, trust=EXCLUDED.trust, content=EXCLUDED.content, content_hash=EXCLUDED.content_hash, updated_at=EXCLUDED.updated_at`, document.ID, document.Source, document.URL, document.Title, document.Type, document.Trust, document.Content, document.ContentHash, document.UpdatedAt)
 	if err != nil { return fmt.Errorf("upsert RAG document %q: %w", document.ID, err) }
-
 	for i, chunk := range chunks {
 		_, err := tx.Exec(ctx, `INSERT INTO rag_chunks (id, document_id, chunk_index, content, metadata, embedding) VALUES ($1,$2,$3,$4,$5::jsonb,$6::vector) ON CONFLICT (id) DO UPDATE SET document_id=EXCLUDED.document_id, chunk_index=EXCLUDED.chunk_index, content=EXCLUDED.content, metadata=EXCLUDED.metadata, embedding=EXCLUDED.embedding`, chunk.ID, chunk.DocumentID, chunk.Index, chunk.Content, metadataJSON(chunk.Metadata), pgVectorLiteral(embeddings[i]))
 		if err != nil { return fmt.Errorf("upsert RAG chunk %q: %w", chunk.ID, err) }
@@ -40,11 +48,9 @@ func (r *RAGRepository) Search(ctx context.Context, query []float32, limit int) 
 	defer rows.Close()
 	var results []rag.Result
 	for rows.Next() {
-		var result rag.Result
-		var metadata string
+		var result rag.Result; var metadata string
 		if err := rows.Scan(&result.Chunk.ID, &result.Chunk.DocumentID, &result.Chunk.Index, &result.Chunk.Content, &metadata, &result.Score); err != nil { return nil, fmt.Errorf("scan RAG chunk: %w", err) }
-		result.Chunk.Metadata = parseMetadata(metadata)
-		results = append(results, result)
+		result.Chunk.Metadata = parseMetadata(metadata); results = append(results, result)
 	}
 	if err := rows.Err(); err != nil { return nil, fmt.Errorf("iterate RAG search: %w", err) }
 	return results, nil
