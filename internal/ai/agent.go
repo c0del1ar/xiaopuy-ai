@@ -6,15 +6,24 @@ import "context"
 type Agent struct {
 	Provider Provider
 	Persona  Persona
+	Context  ContextBuilder
 }
 
 func (a *Agent) Reply(ctx context.Context, history []Message, clientMode bool) (ChatResponse, error) {
-	messages := make([]Message, 0, len(history)+1)
-	messages = append(messages, Message{
-		Role:    "system",
-		Content: a.Persona.SystemPrompt(clientMode),
-	})
-	messages = append(messages, history...)
+	base := append([]Message(nil), history...)
+	var messages []Message
+	var err error
+	if a.Context != nil {
+		messages, err = a.Context.Build(base, clientMode)
+		if err != nil {
+			return ChatResponse{}, err
+		}
+	} else {
+		messages = append([]Message{{
+			Role:    "system",
+			Content: a.Persona.SystemPrompt(clientMode),
+		}}, base...)
+	}
 
 	return a.Provider.Chat(ctx, ChatRequest{Messages: messages})
 }
