@@ -1,13 +1,17 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/c0del1ar/xiaopuy-ai/internal/ai"
 	"github.com/c0del1ar/xiaopuy-ai/internal/chat"
 	"github.com/c0del1ar/xiaopuy-ai/internal/router9"
+	"github.com/c0del1ar/xiaopuy-ai/internal/storage/postgres"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func main() {
@@ -21,7 +25,38 @@ func main() {
 		Provider: provider,
 		Persona:  ai.DefaultPersona(),
 	}
-	chatService := &chat.Service{Agent: agent}
+
+	var repository chat.Repository
+	if dsn := os.Getenv("DATABASE_URL"); dsn != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		pool, err := pgxpool.New(ctx, dsn)
+		if err != nil {
+			cancel()
+			log.Fatalf("create PostgreSQL pool: %v", err)
+		}
+		if err := pool.Ping(ctx); err != nil {
+			pool.Close()
+			cancel()
+			log.Fatalf("ping PostgreSQL: %v", err)
+		}
+		if err := postgres.Migrate(ctx, pool); err != nil {
+			pool.Close()
+			cancel()
+			log.Fatalf("migrate PostgreSQL: %v", err)
+		}
+		cancel()
+		defer pool.Close()
+		repository = postgres.New(pool)
+		log.Println("PostgreSQL persistence enabled")
+	} else {
+		repository = chat.NewMemoryRepository()
+		log.Println("DATABASE_URL is not set; using in-memory persistence")
+	}
+
+	chatService := &chat.Service{
+		Agent:      agent,
+		Repository: repository,
+	}
 	chatHandler := &chat.HTTPHandler{Service: chatService}
 
 	mux := http.NewServeMux()
