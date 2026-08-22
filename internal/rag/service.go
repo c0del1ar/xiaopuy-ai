@@ -2,6 +2,8 @@ package rag
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 
 	"github.com/c0del1ar/xiaopuy-ai/internal/embedding"
@@ -13,28 +15,24 @@ type Service struct {
 }
 
 func (s *Service) Index(ctx context.Context, document Document, maxChars, overlap int) error {
-	if s == nil || s.Embeddings == nil || s.Repository == nil {
-		return fmt.Errorf("RAG service is not configured")
-	}
+	if s == nil || s.Embeddings == nil || s.Repository == nil { return fmt.Errorf("RAG service is not configured") }
+	if document.Content == "" { return fmt.Errorf("document has no content") }
+	if document.ContentHash == "" { document.ContentHash = ContentHash(document.Content) }
 	chunks := ChunkText(document.Content, maxChars, overlap)
-	if len(chunks) == 0 {
-		return fmt.Errorf("document has no content")
-	}
+	if len(chunks) == 0 { return fmt.Errorf("document has no content") }
 
 	embeddings := make([][]float32, 0, len(chunks))
 	items := make([]Chunk, 0, len(chunks))
 	for i, content := range chunks {
 		vector, err := s.Embeddings.Embed(ctx, content)
-		if err != nil {
-			return fmt.Errorf("embed chunk %d: %w", i, err)
-		}
+		if err != nil { return fmt.Errorf("embed chunk %d: %w", i, err) }
 		embeddings = append(embeddings, vector)
 		items = append(items, Chunk{
 			ID: contentID(document.ID, i), DocumentID: document.ID, Index: i, Content: content,
 			Metadata: map[string]string{"source": document.Source, "url": document.URL, "title": document.Title, "type": document.Type, "trust": document.Trust},
 		})
 	}
-	return s.Repository.Upsert(ctx, items, embeddings)
+	return s.Repository.Upsert(ctx, document, items, embeddings)
 }
 
 func (s *Service) Retrieve(ctx context.Context, query string, limit int) ([]Result, error) {
@@ -46,4 +44,5 @@ func (s *Service) Retrieve(ctx context.Context, query string, limit int) ([]Resu
 	return s.Repository.Search(ctx, vector, limit)
 }
 
+func ContentHash(content string) string { sum := sha256.Sum256([]byte(content)); return hex.EncodeToString(sum[:]) }
 func contentID(documentID string, index int) string { return fmt.Sprintf("%s:%d", documentID, index) }
