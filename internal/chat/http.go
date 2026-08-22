@@ -37,13 +37,9 @@ func (h *HTTPHandler) ReplyHTTP(w http.ResponseWriter, r *http.Request) {
 	conversation := NewConversation(input.ConversationID, input.OwnerID, input.ContactID, input.ClientMode)
 	if h.Service.Repository != nil && input.ConversationID != "" {
 		stored, err := h.Service.Repository.Get(r.Context(), input.ConversationID)
-		switch err {
-		case nil:
+		if err == nil {
 			conversation = stored
-		case ErrConversationNotFound:
-			// First message in a new persistent conversation.
-		case nil:
-		default:
+		} else if err != ErrConversationNotFound {
 			http.Error(w, "failed to load conversation", http.StatusInternalServerError)
 			return
 		}
