@@ -2,6 +2,8 @@ package postgres
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 
@@ -91,11 +93,19 @@ func (r *Repository) Save(ctx context.Context, conversation chat.Conversation) e
 		return fmt.Errorf("replace messages: %w", err)
 	}
 
-	for _, message := range conversation.Messages {
+	for index, message := range conversation.Messages {
+		id := message.ID
+		if id == "" {
+			id, err = newMessageID(index)
+			if err != nil {
+				return fmt.Errorf("generate message id: %w", err)
+			}
+		}
+
 		_, err := tx.Exec(ctx, `
 			INSERT INTO messages (id, conversation_id, role, content, created_at)
 			VALUES ($1, $2, $3, $4, $5)`,
-			message.ID,
+			id,
 			conversation.ID,
 			message.Role,
 			message.Content,
@@ -110,4 +120,12 @@ func (r *Repository) Save(ctx context.Context, conversation chat.Conversation) e
 		return fmt.Errorf("commit conversation: %w", err)
 	}
 	return nil
+}
+
+func newMessageID(index int) (string, error) {
+	buf := make([]byte, 12)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("msg_%d_%s", index, hex.EncodeToString(buf)), nil
 }
