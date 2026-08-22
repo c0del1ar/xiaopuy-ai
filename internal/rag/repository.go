@@ -2,8 +2,8 @@ package rag
 
 import "context"
 
-// Repository stores indexed chunks and retrieves the most relevant chunks.
+// Repository stores indexed documents/chunks and retrieves the most relevant chunks.
 type Repository interface {
-	Upsert(ctx context.Context, chunks []Chunk, embeddings [][]float32) error
+	Upsert(ctx context.Context, document Document, chunks []Chunk, embeddings [][]float32) error
 	Search(ctx context.Context, query []float32, limit int) ([]Result, error)
 }
