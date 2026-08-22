@@ -13,11 +13,17 @@ type RAGRepository struct { pool *pgxpool.Pool }
 
 func NewRAGRepository(pool *pgxpool.Pool) *RAGRepository { return &RAGRepository{pool: pool} }
 
-func (r *RAGRepository) Upsert(ctx context.Context, chunks []rag.Chunk, embeddings [][]float32) error {
+func (r *RAGRepository) Upsert(ctx context.Context, document rag.Document, chunks []rag.Chunk, embeddings [][]float32) error {
 	if len(chunks) != len(embeddings) { return fmt.Errorf("chunks and embeddings length mismatch: %d != %d", len(chunks), len(embeddings)) }
 	if len(chunks) == 0 { return nil }
+	if document.ContentHash == "" { document.ContentHash = rag.ContentHash(document.Content) }
+
 	tx, err := r.pool.Begin(ctx); if err != nil { return fmt.Errorf("begin RAG transaction: %w", err) }
 	defer tx.Rollback(ctx)
+
+	_, err = tx.Exec(ctx, `INSERT INTO rag_documents (id, source, url, title, type, trust, content, content_hash, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (id) DO UPDATE SET source=EXCLUDED.source, url=EXCLUDED.url, title=EXCLUDED.title, type=EXCLUDED.type, trust=EXCLUDED.trust, content=EXCLUDED.content, content_hash=EXCLUDED.content_hash, updated_at=EXCLUDED.updated_at`, document.ID, document.Source, document.URL, document.Title, document.Type, document.Trust, document.Content, document.ContentHash, document.UpdatedAt)
+	if err != nil { return fmt.Errorf("upsert RAG document %q: %w", document.ID, err) }
+
 	for i, chunk := range chunks {
 		_, err := tx.Exec(ctx, `INSERT INTO rag_chunks (id, document_id, chunk_index, content, metadata, embedding) VALUES ($1,$2,$3,$4,$5::jsonb,$6::vector) ON CONFLICT (id) DO UPDATE SET document_id=EXCLUDED.document_id, chunk_index=EXCLUDED.chunk_index, content=EXCLUDED.content, metadata=EXCLUDED.metadata, embedding=EXCLUDED.embedding`, chunk.ID, chunk.DocumentID, chunk.Index, chunk.Content, metadataJSON(chunk.Metadata), pgVectorLiteral(embeddings[i]))
 		if err != nil { return fmt.Errorf("upsert RAG chunk %q: %w", chunk.ID, err) }
