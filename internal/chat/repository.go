@@ -2,8 +2,11 @@ package chat
 
 import (
 	"context"
+	"errors"
 	"sync"
 )
+
+var ErrConversationNotFound = errors.New("conversation not found")
 
 // Repository persists conversation state. The application depends on this
 // interface so PostgreSQL can be introduced without coupling the chat domain
