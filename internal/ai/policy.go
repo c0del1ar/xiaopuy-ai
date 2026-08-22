@@ -1,13 +1,15 @@
 package ai
 
+import "strings"
+
 // ReplyDecision describes what the assistant is allowed to do with an inbound message.
 type ReplyDecision string
 
 const (
-	AllowReply     ReplyDecision = "allow_reply"
-	NeedContext    ReplyDecision = "need_context"
-	EscalateOwner  ReplyDecision = "escalate_owner"
-	DoNotReply     ReplyDecision = "do_not_reply"
+	AllowReply    ReplyDecision = "allow_reply"
+	NeedContext   ReplyDecision = "need_context"
+	EscalateOwner ReplyDecision = "escalate_owner"
+	DoNotReply    ReplyDecision = "do_not_reply"
 )
 
 type PolicyInput struct {
@@ -20,7 +22,7 @@ type PolicyInput struct {
 type Policy struct{}
 
 func (Policy) Decide(input PolicyInput) ReplyDecision {
-	if input.Message == "" {
+	if strings.TrimSpace(input.Message) == "" {
 		return DoNotReply
 	}
 
