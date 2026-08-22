@@ -21,16 +21,22 @@ func TestRepositoryRoundTrip(t *testing.T) {
 
 	pool, err := pgxpool.New(ctx, dsn)
 	if err != nil {
-		t.Fatalf("create pool: %v", err)
+		t.Fatalf("create postgres pool: %v", err)
 	}
 	defer pool.Close()
 
 	if err := pool.Ping(ctx); err != nil {
-		t.Fatalf("ping database: %v", err)
+		t.Fatalf("ping postgres: %v", err)
 	}
 
 	repo := New(pool)
-	conversation := chat.NewConversation("integration-test", "owner", "contact", true)
+
+	conversation := chat.Conversation{
+		ID:         "integration-test",
+		OwnerID:    "owner",
+		ContactID:  "contact",
+		ClientMode: true,
+	}
 	conversation.Add(chat.RoleUser, "Hello")
 	conversation.Add(chat.RoleAssistant, "Hi, how can I help?")
 
