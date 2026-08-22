@@ -8,8 +8,9 @@ import (
 )
 
 type Service struct {
-	Agent  *ai.Agent
-	Policy ai.Policy
+	Agent      *ai.Agent
+	Policy     ai.Policy
+	Repository Repository
 }
 
 type ReplyResult struct {
@@ -20,6 +21,9 @@ type ReplyResult struct {
 func (s *Service) Reply(ctx context.Context, conversation *Conversation, userText string) (ReplyResult, error) {
 	if s == nil || s.Agent == nil {
 		return ReplyResult{}, fmt.Errorf("chat service has no AI agent")
+	}
+	if conversation == nil {
+		return ReplyResult{}, fmt.Errorf("conversation cannot be nil")
 	}
 	if userText == "" {
 		return ReplyResult{}, fmt.Errorf("message cannot be empty")
@@ -49,8 +53,34 @@ func (s *Service) Reply(ctx context.Context, conversation *Conversation, userTex
 	}
 
 	conversation.Add(RoleAssistant, response.Content)
+
+	if s.Repository != nil {
+		if err := s.Repository.Save(ctx, *conversation); err != nil {
+			return ReplyResult{}, fmt.Errorf("persist conversation: %w", err)
+		}
+	}
+
 	return ReplyResult{
 		Decision: ai.AllowReply,
 		Response: response.Content,
 	}, nil
+}
+
+// ReplyToConversation loads the latest conversation state before generating a reply.
+// This is the persistence-aware entry point used by channel adapters.
+func (s *Service) ReplyToConversation(ctx context.Context, conversationID string, userText string) (ReplyResult, Conversation, error) {
+	if s == nil || s.Repository == nil {
+		return ReplyResult{}, Conversation{}, fmt.Errorf("chat service has no repository")
+	}
+
+	conversation, err := s.Repository.Get(ctx, conversationID)
+	if err != nil {
+		return ReplyResult{}, Conversation{}, fmt.Errorf("load conversation: %w", err)
+	}
+
+	result, err := s.Reply(ctx, &conversation, userText)
+	if err != nil {
+		return ReplyResult{}, Conversation{}, err
+	}
+	return result, conversation, nil
 }
