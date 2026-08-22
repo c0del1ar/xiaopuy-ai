@@ -17,7 +17,8 @@ type replyRequest struct {
 
 type replyResponse struct {
 	ConversationID string `json:"conversation_id"`
-	Reply          string `json:"reply"`
+	Decision       string `json:"decision"`
+	Reply          string `json:"reply,omitempty"`
 }
 
 // ReplyHTTP is intentionally stateless for now. Persistence will be added with
@@ -41,7 +42,7 @@ func (h *HTTPHandler) ReplyHTTP(w http.ResponseWriter, r *http.Request) {
 		conversation.ID = "ephemeral"
 	}
 
-	reply, err := h.Service.Reply(r.Context(), conversation, input.Message)
+	result, err := h.Service.Reply(r.Context(), conversation, input.Message)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
@@ -50,6 +51,7 @@ func (h *HTTPHandler) ReplyHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(replyResponse{
 		ConversationID: conversation.ID,
-		Reply:          reply,
+		Decision:       string(result.Decision),
+		Reply:          result.Response,
 	})
 }
