@@ -8,15 +8,29 @@ import (
 )
 
 type Service struct {
-	Agent *ai.Agent
+	Agent  *ai.Agent
+	Policy ai.Policy
 }
 
-func (s *Service) Reply(ctx context.Context, conversation *Conversation, userText string) (string, error) {
+type ReplyResult struct {
+	Decision ai.ReplyDecision
+	Response string
+}
+
+func (s *Service) Reply(ctx context.Context, conversation *Conversation, userText string) (ReplyResult, error) {
 	if s == nil || s.Agent == nil {
-		return "", fmt.Errorf("chat service has no AI agent")
+		return ReplyResult{}, fmt.Errorf("chat service has no AI agent")
 	}
 	if userText == "" {
-		return "", fmt.Errorf("message cannot be empty")
+		return ReplyResult{}, fmt.Errorf("message cannot be empty")
+	}
+
+	decision := s.Policy.Decide(ai.PolicyInput{
+		Message:    userText,
+		ClientMode: conversation.ClientMode,
+	})
+	if decision != ai.AllowReply {
+		return ReplyResult{Decision: decision}, nil
 	}
 
 	conversation.Add(RoleUser, userText)
@@ -31,9 +45,12 @@ func (s *Service) Reply(ctx context.Context, conversation *Conversation, userTex
 
 	response, err := s.Agent.Reply(ctx, history, conversation.ClientMode)
 	if err != nil {
-		return "", err
+		return ReplyResult{}, err
 	}
 
 	conversation.Add(RoleAssistant, response.Content)
-	return response.Content, nil
+	return ReplyResult{
+		Decision: ai.AllowReply,
+		Response: response.Content,
+	}, nil
 }
