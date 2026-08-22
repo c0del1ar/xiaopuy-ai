@@ -11,6 +11,8 @@ type HTTPHandler struct {
 
 type replyRequest struct {
 	ConversationID string `json:"conversation_id"`
+	OwnerID        string `json:"owner_id"`
+	ContactID      string `json:"contact_id"`
 	ClientMode     bool   `json:"client_mode"`
 	Message        string `json:"message"`
 }
@@ -21,8 +23,6 @@ type replyResponse struct {
 	Reply          string `json:"reply,omitempty"`
 }
 
-// ReplyHTTP is intentionally stateless for now. Persistence will be added with
-// PostgreSQL after the core request/response flow is stable.
 func (h *HTTPHandler) ReplyHTTP(w http.ResponseWriter, r *http.Request) {
 	var input replyRequest
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
@@ -34,15 +34,22 @@ func (h *HTTPHandler) ReplyHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	conversation := &Conversation{
-		ID:         input.ConversationID,
-		ClientMode: input.ClientMode,
-	}
-	if conversation.ID == "" {
-		conversation.ID = "ephemeral"
+	conversation := NewConversation(input.ConversationID, input.OwnerID, input.ContactID, input.ClientMode)
+	if h.Service.Repository != nil && input.ConversationID != "" {
+		stored, err := h.Service.Repository.Get(r.Context(), input.ConversationID)
+		switch err {
+		case nil:
+			conversation = stored
+		case ErrConversationNotFound:
+			// First message in a new persistent conversation.
+		case nil:
+		default:
+			http.Error(w, "failed to load conversation", http.StatusInternalServerError)
+			return
+		}
 	}
 
-	result, err := h.Service.Reply(r.Context(), conversation, input.Message)
+	result, err := h.Service.Reply(r.Context(), &conversation, input.Message)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
