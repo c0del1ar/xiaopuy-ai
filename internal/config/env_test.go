@@ -31,3 +31,16 @@ func TestLoadDotEnvMissingFileIsNotAnError(t *testing.T) {
 		t.Fatalf("LoadDotEnv() error = %v", err)
 	}
 }
+
+func TestCommaSeparated(t *testing.T) {
+	got := CommaSeparated(" aryakun.id, ,docs.aryakun.id ,")
+	want := []string{"aryakun.id", "docs.aryakun.id"}
+	if len(got) != len(want) {
+		t.Fatalf("length = %d, want %d", len(got), len(want))
+	}
+	for index := range want {
+		if got[index] != want[index] {
+			t.Fatalf("value[%d] = %q, want %q", index, got[index], want[index])
+		}
+	}
+}

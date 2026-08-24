@@ -62,3 +62,29 @@ func TestIndexEmbedsChangedDocument(t *testing.T) {
 	if embeddings.calls == 0 { t.Fatal("embedding provider was not called for changed document") }
 	if repo.upsertCall != 1 { t.Fatalf("upsert calls = %d, want 1", repo.upsertCall) }
 }
+
+func TestIndexRejectsUnexpectedEmbeddingDimension(t *testing.T) {
+	service := &Service{
+		Embeddings: &countingEmbeddingProvider{},
+		Repository: &hashRepository{},
+		Dimension:  4096,
+	}
+
+	err := service.Index(context.Background(), Document{ID: "doc-1", Content: "A document with enough content to index."}, 100, 0)
+	if err == nil {
+		t.Fatal("Index() error = nil, want embedding-dimension error")
+	}
+}
+
+func TestRetrieveRejectsUnexpectedEmbeddingDimension(t *testing.T) {
+	service := &Service{
+		Embeddings: &countingEmbeddingProvider{},
+		Repository: &hashRepository{},
+		Dimension:  4096,
+	}
+
+	_, err := service.Retrieve(context.Background(), "website services", 5)
+	if err == nil {
+		t.Fatal("Retrieve() error = nil, want embedding-dimension error")
+	}
+}

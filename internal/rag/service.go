@@ -12,6 +12,7 @@ import (
 type Service struct {
 	Embeddings embedding.Provider
 	Repository Repository
+	Dimension  int
 }
 
 func (s *Service) Index(ctx context.Context, document Document, maxChars, overlap int) error {
@@ -31,6 +32,9 @@ func (s *Service) Index(ctx context.Context, document Document, maxChars, overla
 	for i, content := range chunks {
 		vector, err := s.Embeddings.Embed(ctx, content)
 		if err != nil { return fmt.Errorf("embed chunk %d: %w", i, err) }
+		if err := embedding.ValidateDimension(vector, s.Dimension); err != nil {
+			return fmt.Errorf("validate embedding chunk %d: %w", i, err)
+		}
 		embeddings = append(embeddings, vector)
 		items = append(items, Chunk{ID: contentID(document.ID, i), DocumentID: document.ID, Index: i, Content: content, Metadata: map[string]string{"source": document.Source, "url": document.URL, "title": document.Title, "type": document.Type, "trust": document.Trust}})
 	}
@@ -41,7 +45,9 @@ func (s *Service) Retrieve(ctx context.Context, query string, limit int) ([]Resu
 	if s == nil || s.Embeddings == nil || s.Repository == nil { return nil, fmt.Errorf("RAG service is not configured") }
 	if query == "" { return nil, fmt.Errorf("query cannot be empty") }
 	if limit <= 0 { limit = 5 }
-	vector, err := s.Embeddings.Embed(ctx, query); if err != nil { return nil, fmt.Errorf("embed query: %w", err) }
+	vector, err := s.Embeddings.Embed(ctx, query)
+	if err != nil { return nil, fmt.Errorf("embed query: %w", err) }
+	if err := embedding.ValidateDimension(vector, s.Dimension); err != nil { return nil, fmt.Errorf("validate query embedding: %w", err) }
 	return s.Repository.Search(ctx, vector, limit)
 }
 

@@ -31,7 +31,7 @@ func DefaultConfig() Config {
 
 // CrawlRequest describes one explicit ingestion run.
 type CrawlRequest struct {
-	SeedURL string
+	SeedURL string `json:"seed_url"`
 }
 
 // Service owns the ingestion workflow. HTTP handlers, schedulers, and CLI code

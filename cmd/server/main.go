@@ -10,6 +10,8 @@ import (
 	"github.com/c0del1ar/xiaopuy-ai/internal/ai"
 	"github.com/c0del1ar/xiaopuy-ai/internal/chat"
 	"github.com/c0del1ar/xiaopuy-ai/internal/config"
+	"github.com/c0del1ar/xiaopuy-ai/internal/ingest"
+	"github.com/c0del1ar/xiaopuy-ai/internal/rag"
 	"github.com/c0del1ar/xiaopuy-ai/internal/router9"
 	"github.com/c0del1ar/xiaopuy-ai/internal/storage/postgres"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -32,6 +34,7 @@ func main() {
 	}
 
 	var repository chat.Repository
+	var ingestHandler *ingest.HTTPHandler
 	if dsn := os.Getenv("DATABASE_URL"); dsn != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		pool, err := pgxpool.New(ctx, dsn)
@@ -53,6 +56,24 @@ func main() {
 		defer pool.Close()
 		repository = postgres.New(pool)
 		log.Println("PostgreSQL persistence enabled")
+
+		embeddingModel := os.Getenv("ROUTER9_EMBEDDING_MODEL")
+		allowedDomains := config.CommaSeparated(os.Getenv("INGEST_ALLOWED_DOMAINS"))
+		if embeddingModel == "" || len(allowedDomains) == 0 {
+			log.Println("Website ingestion disabled: set ROUTER9_EMBEDDING_MODEL and INGEST_ALLOWED_DOMAINS")
+		} else {
+			ragService := &rag.Service{
+				Embeddings: router9.NewEmbedding(os.Getenv("ROUTER9_BASE_URL"), os.Getenv("ROUTER9_API_KEY"), embeddingModel),
+				Repository: postgres.NewRAGRepository(pool),
+				Dimension:  4096,
+			}
+			ingestService := &ingest.Service{
+				Crawler: &ingest.Crawler{Fetcher: &ingest.Fetcher{}, Indexer: ragService},
+				Config:  ingest.Config{AllowedDomains: allowedDomains},
+			}
+			ingestHandler = &ingest.HTTPHandler{Service: ingestService}
+			log.Printf("Website ingestion enabled for %v", allowedDomains)
+		}
 	} else {
 		repository = chat.NewMemoryRepository()
 		log.Println("DATABASE_URL is not set; using in-memory persistence")
@@ -70,6 +91,9 @@ func main() {
 		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	})
 	mux.HandleFunc("POST /v1/chat/reply", chatHandler.ReplyHTTP)
+	if ingestHandler != nil {
+		mux.HandleFunc("POST /v1/ingest/crawl", ingestHandler.Crawl)
+	}
 
 	addr := os.Getenv("HTTP_ADDR")
 	if addr == "" {

@@ -60,6 +60,19 @@ func LoadDotEnv(path string) error {
 	return nil
 }
 
+// CommaSeparated splits an environment-style comma-separated list and removes
+// blank entries.
+func CommaSeparated(value string) []string {
+	parts := strings.Split(value, ",")
+	values := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if value := strings.TrimSpace(part); value != "" {
+			values = append(values, value)
+		}
+	}
+	return values
+}
+
 func Bool(key string, fallback bool) bool {
 	value := os.Getenv(key)
 	if value == "" {
